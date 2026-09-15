@@ -72,3 +72,18 @@ Archive rows include a separate confirmed Delete Media action. It removes the
 associated local media and sidecars before removing the archive reference.
 Storage/persistence errors keep the reference for retry; missing files are tolerated.
 The feature uses the same guarded file resolver as Completed. No downloader changes.
+
+
+## Archive categories
+
+The archive index stores a category catalog and a list of names on each video.
+Existing records default to uncategorized. Initial categories: 3D Printing,
+Machine and Fab stuff, Electronics, Funny Stuff. Names are normalized, limited to
+60 characters and deduplicated case-insensitively. All archive mutations preserve
+the catalog through AtomicJsonStore. Media and metadata files are unchanged.
+The UI supports multiple memberships, category chips, creating categories, and
+category/uncategorized filtering combined with full-text search.
+
+Rollback: image `metube:pre-categories-20260915`, state/compose backup
+`/opt/docker/metube/rollback-categories-20260915`. Older versions do not preserve
+the category catalog on writes; save current archive.json before downgrading.
