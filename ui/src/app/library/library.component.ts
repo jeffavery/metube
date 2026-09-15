@@ -92,6 +92,8 @@ export class LibraryComponent implements OnChanges, OnInit {
   query = '';
   loading = false;
   error = '';
+  actionError = '';
+  deletingId = '';
   shortTitle = shortTitle;
 
   ngOnInit() {
@@ -114,6 +116,25 @@ export class LibraryComponent implements OnChanges, OnInit {
   thumbnailLink(item: ArchiveItem) { return 'library/' + encodeURIComponent(item.id) + '/thumbnail'; }
 
   hideThumbnail(event: Event) { (event.target as HTMLImageElement).hidden = true; }
+
+  deleteMedia(item: ArchiveItem) {
+    if (this.deletingId || !window.confirm(`Delete "${item.title}" and its downloaded media, thumbnail, metadata and comment files? This cannot be undone.`)) return;
+    this.deletingId = item.id;
+    this.actionError = '';
+    this.http.post('library/delete-media', { id: item.id })
+      .pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
+        next: () => {
+          this.deletingId = '';
+          this.reload();
+          this.cdr.markForCheck();
+        },
+        error: () => {
+          this.deletingId = '';
+          this.actionError = 'Could not complete deletion. The archive entry was kept; check storage permissions and try again.';
+          this.cdr.markForCheck();
+        },
+      });
+  }
 
   reload() {
     this.request?.unsubscribe();

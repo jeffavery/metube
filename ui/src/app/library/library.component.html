@@ -1,4 +1,5 @@
 <main class="library container-fluid py-4">
+  @if (actionError) { <div class="alert alert-danger" role="alert">{{actionError}}</div> }
   @if (playId) {
     <a href="#/archive" class="back-link">← Back to Archive</a>
   } @else {
@@ -85,6 +86,10 @@
             @if (item.downloaded_at) { <p class="small text-body-secondary mb-0">Downloaded {{item.downloaded_at | date:'medium'}}</p> }
             @if (!item.available) { <span class="small text-warning">Media unavailable</span> }
           </div>
+          <button type="button" class="btn btn-outline-danger archive-delete" [disabled]="!!deletingId"
+            [attr.aria-label]="'Delete Media: ' + item.title" (click)="deleteMedia(item)">
+            {{deletingId === item.id ? 'Deleting…' : 'Delete Media'}}
+          </button>
         </article>
       } @empty {
         <div class="empty-state">

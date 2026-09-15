@@ -23,7 +23,21 @@ def register_library(routes, config, queue, sio, read_json, require_id):
 
     @routes.get(prefix)
     async def listing(request):
-        return web.json_response(await asyncio.to_thread(library.list_items))
+        async with library.lock:
+            return web.json_response(await asyncio.to_thread(library.list_items))
+
+    @routes.post(prefix + '/delete-media')
+    async def delete_media(request):
+        post = await read_json(request)
+        id = require_id(post)
+        try:
+            await library.delete_media(id)
+        except KeyError:
+            return web.json_response({'status': 'error', 'msg': 'This archived video no longer exists.'}, status=404)
+        except (ValueError, OSError):
+            return web.json_response({'status': 'error', 'msg': 'Could not complete deletion. The archive entry was kept; check storage permissions and retry.'}, status=400)
+        await sio.emit('library_changed', {})
+        return web.json_response({'status': 'ok'})
 
     @routes.get(prefix + '/{id}')
     async def details(request):

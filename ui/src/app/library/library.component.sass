@@ -38,8 +38,18 @@ h1
     object-fit: cover
 
 .archive-summary
+  flex: 1
   min-width: 0
   overflow-wrap: anywhere
+
+.archive-delete
+  flex-shrink: 0
+
+@media (max-width: 600px)
+  .archive-item
+    flex-wrap: wrap
+  .archive-delete
+    margin-left: auto
 
 .archive-title
   display: block

@@ -11,6 +11,25 @@ const video: ArchiveItem = {
 };
 
 describe('Archive', () => {
+  it('requires confirmation before deleting archived media', async () => {
+    const post = vi.fn().mockReturnValue(of({ status: 'ok' }));
+    await TestBed.configureTestingModule({
+      imports: [LibraryComponent],
+      providers: [
+        { provide: HttpClient, useValue: { post, get: () => of([]) } },
+        { provide: MeTubeSocket, useValue: { fromEvent: () => new Subject() } },
+      ],
+    }).compileComponents();
+    const component = TestBed.createComponent(LibraryComponent).componentInstance;
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
+    component.deleteMedia(video);
+    expect(post).not.toHaveBeenCalled();
+    confirm.mockReturnValue(true);
+    component.deleteMedia(video);
+    expect(post).toHaveBeenCalledWith('library/delete-media', { id: video.id });
+    expect(component.deletingId).toBe('');
+    confirm.mockRestore();
+  });
   it('searches undisplayed title words, creator and description', () => {
     expect(matchesSearch(video, 'hidden phrase')).toBe(true);
     expect(matchesSearch(video, 'CREATOR useful')).toBe(true);

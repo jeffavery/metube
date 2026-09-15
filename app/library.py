@@ -131,6 +131,26 @@ class Library:
             raise KeyError(id)
         return record
 
+    async def delete_media(self, id):
+        async with self.lock:
+            # Keep the reference until both file cleanup and persistence succeed,
+            # so a storage failure can be retried safely.
+            await asyncio.to_thread(self._delete_files, id)
+            updated = dict(self.records)
+            del updated[id]
+            await asyncio.to_thread(self.store.save, {'records': updated})
+            self.records = updated
+
+    def _delete_files(self, id):
+        paths, _ = self.paths(id)
+        if any(os.path.exists(path) and not os.path.isfile(path) for path in paths):
+            raise ValueError('An output path is not a regular file')
+        for path in paths:
+            try:
+                os.remove(path)
+            except FileNotFoundError:
+                pass
+
     def paths(self, id):
         return media_paths(SimpleNamespace(**self.get_record(id)), self.config)
 

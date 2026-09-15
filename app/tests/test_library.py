@@ -131,6 +131,52 @@ def test_comment_fields_are_optional_and_nonfinite_values_are_ignored():
 
 
 @pytest.mark.asyncio
+async def test_archive_delete_removes_sidecars_and_persists(environment):
+    config, queue, _, root = environment
+    library = Library(config, queue)
+    key = await library.archive('completed')
+    neighbor = root / 'another.mp4'
+    neighbor.write_bytes(b'keep')
+    await library.delete_media(key)
+    assert not (root / 'video.mp4').exists()
+    assert not (root / 'video.jpg').exists()
+    assert not (root / 'video.info.json').exists()
+    assert neighbor.read_bytes() == b'keep'
+    assert not Library(config, queue).records
+
+
+@pytest.mark.asyncio
+async def test_archive_delete_failure_keeps_reference_for_retry(environment):
+    config, queue, _, root = environment
+    library = Library(config, queue)
+    key = await library.archive('completed')
+    with patch('library.os.remove', side_effect=PermissionError):
+        with pytest.raises(PermissionError):
+            await library.delete_media(key)
+    assert key in library.records
+    assert (root / 'video.mp4').exists()
+    with patch.object(library.store, 'save', side_effect=OSError):
+        with pytest.raises(OSError):
+            await library.delete_media(key)
+    assert key in Library(config, queue).records
+    await library.delete_media(key)
+    assert not Library(config, queue).records
+
+
+@pytest.mark.asyncio
+async def test_archive_delete_rejects_symlink_before_removing_media(environment):
+    config, queue, _, root = environment
+    library = Library(config, queue)
+    key = await library.archive('completed')
+    (root / 'video.jpg').unlink()
+    (root / 'video.jpg').symlink_to(root / 'video.mp4')
+    with pytest.raises(ValueError):
+        await library.delete_media(key)
+    assert (root / 'video.mp4').exists()
+    assert key in library.records
+
+
+@pytest.mark.asyncio
 async def test_archive_http_media_range_thumbnail_and_reload(environment):
     config, queue, _, _ = environment
     routes = web.RouteTableDef()
@@ -157,3 +203,7 @@ async def test_archive_http_media_range_thumbnail_and_reload(environment):
         assert response.content_type == 'image/jpeg'
         response = await client.get('/library/missing/media')
         assert response.status == 404
+        response = await client.post('/library/delete-media', json={'id': key})
+        assert response.status == 200
+        response = await client.get('/library')
+        assert await response.json() == []
