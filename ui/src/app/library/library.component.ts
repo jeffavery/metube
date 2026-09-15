@@ -3,7 +3,7 @@ import { HttpClient } from '@angular/common/http';
 import { ChangeDetectionStrategy, ChangeDetectorRef, Component, DestroyRef, Input, OnChanges, OnInit, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
-import { Subscription } from 'rxjs';
+import { forkJoin, Subscription } from 'rxjs';
 import { MeTubeSocket } from '../services/metube-socket.service';
 
 export interface ArchivedComment {
@@ -29,6 +29,7 @@ export interface ArchiveItem {
   download_type: string;
   warning: string;
   comments?: ArchivedComment[];
+  categories?: string[];
 }
 
 export function shortTitle(title: string): string {
@@ -39,6 +40,12 @@ export function shortTitle(title: string): string {
 export function matchesSearch(item: ArchiveItem, query: string): boolean {
   const haystack = [item.title, item.creator, item.description, item.source].join(' ').toLocaleLowerCase();
   return query.trim().toLocaleLowerCase().split(/\s+/).every(word => haystack.includes(word));
+}
+
+export function matchesCategory(item: ArchiveItem, category: string | null | undefined): boolean {
+  if (category === undefined) return true;
+  if (category === null) return !item.categories?.length;
+  return !!item.categories?.includes(category);
 }
 
 // Iterative traversal also handles missing parents, duplicate roots and cycles
@@ -94,6 +101,13 @@ export class LibraryComponent implements OnChanges, OnInit {
   error = '';
   actionError = '';
   deletingId = '';
+  categories: string[] = [];
+  categoryFilter: string | null | undefined = undefined;
+  newCategory = '';
+  creatingCategory = false;
+  editingId = '';
+  draftCategories: string[] = [];
+  savingCategories = false;
   shortTitle = shortTitle;
 
   ngOnInit() {
@@ -105,7 +119,57 @@ export class LibraryComponent implements OnChanges, OnInit {
 
   ngOnChanges() { this.reload(); }
 
-  get filteredItems() { return this.items.filter(item => matchesSearch(item, this.query)); }
+  get filteredItems() { return this.items.filter(item => matchesSearch(item, this.query) && matchesCategory(item, this.categoryFilter)); }
+
+  editCategories(item: ArchiveItem) {
+    this.editingId = item.id;
+    this.draftCategories = [...(item.categories ?? [])];
+    this.actionError = '';
+  }
+
+  toggleCategory(name: string) {
+    this.draftCategories = this.draftCategories.includes(name)
+      ? this.draftCategories.filter(item => item !== name) : [...this.draftCategories, name];
+  }
+
+  saveCategories() {
+    if (this.savingCategories) return;
+    this.savingCategories = true;
+    this.http.post('library/' + encodeURIComponent(this.editingId) + '/categories', { categories: this.draftCategories })
+      .pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
+        next: () => {
+          this.savingCategories = false;
+          this.editingId = '';
+          this.reload();
+          this.cdr.markForCheck();
+        },
+        error: () => {
+          this.savingCategories = false;
+          this.actionError = 'Could not save categories. Your selections are still here; please try again.';
+          this.cdr.markForCheck();
+        },
+      });
+  }
+
+  createCategory() {
+    if (this.creatingCategory || !this.newCategory.trim()) return;
+    this.creatingCategory = true;
+    this.actionError = '';
+    this.http.post('library/categories', { name: this.newCategory })
+      .pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
+        next: () => {
+          this.creatingCategory = false;
+          this.newCategory = '';
+          this.reload();
+          this.cdr.markForCheck();
+        },
+        error: () => {
+          this.creatingCategory = false;
+          this.actionError = 'Could not create the category. Use a name of 1–60 characters and try again.';
+          this.cdr.markForCheck();
+        },
+      });
+  }
 
   get playId(): string {
     return this.route.startsWith('#/archive/') ? this.route.substring('#/archive/'.length) : '';
@@ -145,9 +209,13 @@ export class LibraryComponent implements OnChanges, OnInit {
     this.commentLimit = 100;
     const id = this.playId;
     const url = id ? 'library/' + encodeURIComponent(id) : 'library';
-    this.request = this.http.get<ArchiveItem | ArchiveItem[]>(url)
+    this.request = forkJoin({
+      data: this.http.get<ArchiveItem | ArchiveItem[]>(url),
+      categories: this.http.get<string[]>('library/categories'),
+    })
       .pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
-        next: data => {
+        next: ({ data, categories }) => {
+          this.categories = Array.isArray(categories) ? categories.filter(name => typeof name === 'string') : [];
           if (Array.isArray(data)) this.items = data;
           else {
             this.selected = data;

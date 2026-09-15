@@ -1,7 +1,7 @@
 import { TestBed } from '@angular/core/testing';
 import { HttpClient } from '@angular/common/http';
 import { Subject, of } from 'rxjs';
-import { ArchiveItem, ArchivedComment, LibraryComponent, matchesSearch, threadComments } from './library.component';
+import { ArchiveItem, ArchivedComment, LibraryComponent, matchesCategory, matchesSearch, threadComments } from './library.component';
 import { MeTubeSocket } from '../services/metube-socket.service';
 
 const video: ArchiveItem = {
@@ -11,6 +11,38 @@ const video: ArchiveItem = {
 };
 
 describe('Archive', () => {
+  it('supports multiple memberships, uncategorized and search within a category', () => {
+    const categorized = { ...video, categories: ['3D Printing', 'Electronics'] };
+    expect(matchesCategory(categorized, '3D Printing')).toBe(true);
+    expect(matchesCategory(categorized, 'Electronics')).toBe(true);
+    expect(matchesCategory(categorized, 'Funny Stuff')).toBe(false);
+    expect(matchesCategory(categorized, null)).toBe(false);
+    expect(matchesCategory(video, null)).toBe(true);
+    expect(matchesCategory(categorized, undefined)).toBe(true);
+    expect(matchesCategory(categorized, 'Electronics') && matchesSearch(categorized, 'hidden phrase')).toBe(true);
+  });
+
+  it('saves multiple selected categories and creates a new category', async () => {
+    const post = vi.fn().mockReturnValue(of({ status: 'ok' }));
+    await TestBed.configureTestingModule({
+      imports: [LibraryComponent],
+      providers: [
+        { provide: HttpClient, useValue: { post, get: () => of([]) } },
+        { provide: MeTubeSocket, useValue: { fromEvent: () => new Subject() } },
+      ],
+    }).compileComponents();
+    const component = TestBed.createComponent(LibraryComponent).componentInstance;
+    component.editCategories(video);
+    component.toggleCategory('3D Printing');
+    component.toggleCategory('Electronics');
+    component.saveCategories();
+    expect(post).toHaveBeenCalledWith('library/video/categories', { categories: ['3D Printing', 'Electronics'] });
+    expect(component.editingId).toBe('');
+    component.newCategory = 'Projects';
+    component.createCategory();
+    expect(post).toHaveBeenCalledWith('library/categories', { name: 'Projects' });
+    expect(component.newCategory).toBe('');
+  });
   it('requires confirmation before deleting archived media', async () => {
     const post = vi.fn().mockReturnValue(of({ status: 'ok' }));
     await TestBed.configureTestingModule({

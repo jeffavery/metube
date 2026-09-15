@@ -9,6 +9,23 @@
       <label for="archive-search" class="visually-hidden">Search archived videos</label>
       <input id="archive-search" type="search" class="form-control search" [(ngModel)]="query"
         placeholder="Search titles, creators and descriptions" />
+      <div class="category-toolbar mt-3">
+        <div>
+          <label for="category-filter" class="form-label">Category</label>
+          <select id="category-filter" class="form-select" [(ngModel)]="categoryFilter">
+            <option [ngValue]="undefined">All categories</option>
+            <option [ngValue]="null">Uncategorized</option>
+            @for (category of categories; track category) { <option [ngValue]="category">{{category}}</option> }
+          </select>
+        </div>
+        <form (ngSubmit)="createCategory()">
+          <label for="new-category" class="form-label">Create a category</label>
+          <div class="input-group">
+            <input id="new-category" name="newCategory" class="form-control" maxlength="60" placeholder="Category name" [(ngModel)]="newCategory" [disabled]="creatingCategory" />
+            <button type="submit" class="btn btn-outline-primary" [disabled]="creatingCategory || !newCategory.trim()">{{creatingCategory ? 'Creating…' : 'Create'}}</button>
+          </div>
+        </form>
+      </div>
     </header>
   }
   @if (loading) {
@@ -37,6 +54,11 @@
           @if (video.downloaded_at) { <span>Downloaded {{video.downloaded_at | date:'medium'}}</span> }
           @if (video.source) { <a [href]="video.source" target="_blank" rel="noopener noreferrer">View original source ↗</a> }
         </div>
+        @if (video.categories?.length) {
+          <div class="category-tags mt-3">
+            @for (category of video.categories; track category) { <span class="badge text-bg-secondary">{{category}}</span> }
+          </div>
+        }
         @if (video.description) {
           <details class="mt-3"><summary>Description</summary><p class="description">{{video.description}}</p></details>
         }
@@ -85,6 +107,27 @@
             @if (item.creator) { <p class="mb-1">{{item.creator}}</p> }
             @if (item.downloaded_at) { <p class="small text-body-secondary mb-0">Downloaded {{item.downloaded_at | date:'medium'}}</p> }
             @if (!item.available) { <span class="small text-warning">Media unavailable</span> }
+            <div class="category-tags mt-2">
+              @for (category of item.categories ?? []; track category) {
+                <button type="button" class="badge category-tag" (click)="categoryFilter = category" [attr.aria-label]="'Filter by ' + category">{{category}}</button>
+              }
+            </div>
+            @if (editingId === item.id) {
+              <fieldset class="category-editor mt-2" [disabled]="savingCategories">
+                <legend>Choose categories</legend>
+                <div class="category-choices">
+                  @for (category of categories; track category) {
+                    <label><input type="checkbox" class="form-check-input me-2" [checked]="draftCategories.includes(category)" (change)="toggleCategory(category)" />{{category}}</label>
+                  }
+                </div>
+                <div class="d-flex gap-2 mt-3">
+                  <button type="button" class="btn btn-primary btn-sm" (click)="saveCategories()">{{savingCategories ? 'Saving…' : 'Save categories'}}</button>
+                  <button type="button" class="btn btn-outline-secondary btn-sm" (click)="editingId = ''">Cancel</button>
+                </div>
+              </fieldset>
+            } @else {
+              <button type="button" class="btn btn-link btn-sm px-0" (click)="editCategories(item)" [disabled]="savingCategories">Edit categories</button>
+            }
           </div>
           <button type="button" class="btn btn-outline-danger archive-delete" [disabled]="!!deletingId"
             [attr.aria-label]="'Delete Media: ' + item.title" (click)="deleteMedia(item)">
@@ -93,7 +136,7 @@
         </article>
       } @empty {
         <div class="empty-state">
-          @if (query.trim()) { <h2>No matching videos</h2><p>Try another title, creator or phrase.</p> }
+          @if (query.trim() || categoryFilter !== undefined) { <h2>No matching videos</h2><p>Try another search or category.</p> }
           @else { <h2>Your archive is empty</h2><p>Choose Archive beside a completed download to save it here.</p><a href="#">Go to downloads</a> }
         </div>
       }

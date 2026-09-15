@@ -11,6 +11,37 @@ h1
 .search
   max-width: 640px
 
+.category-toolbar
+  display: flex
+  flex-wrap: wrap
+  gap: 1rem
+  > div, form
+    flex: 1 1 240px
+    max-width: 360px
+
+.category-tags, .category-choices
+  display: flex
+  flex-wrap: wrap
+  gap: .5rem
+
+.category-tag
+  color: var(--bs-body-color)
+  background: var(--bs-secondary-bg)
+  border: 1px solid var(--bs-border-color)
+  font-weight: 500
+  padding: .4rem .6rem
+
+.category-editor
+  background: var(--bs-tertiary-bg)
+  padding: 1rem
+  border-radius: 8px
+  legend
+    font-size: .95rem
+    font-weight: 600
+
+.category-choices label
+  padding: .3rem .6rem
+
 .archive-list
   display: grid
   gap: 1rem
