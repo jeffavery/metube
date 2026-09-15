@@ -66,3 +66,9 @@ Archive rollout rollback: `/opt/docker/metube/rollback-archive-20260915` stores
 the previous compose and state. `metube:pre-archive-20260915` preserves the previous
 live image. To revert the UI, use that image and recreate the service while keeping
 current NAS state. The archive index can remain on disk for a future re-upgrade.
+
+
+Archive rows include a separate confirmed Delete Media action. It removes the
+associated local media and sidecars before removing the archive reference.
+Storage/persistence errors keep the reference for retry; missing files are tolerated.
+The feature uses the same guarded file resolver as Completed. No downloader changes.
