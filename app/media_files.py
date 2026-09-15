@@ -19,9 +19,17 @@ def media_paths(info, config):
                      if isinstance(item, dict) and item.get('filename'))
     images = ('.jpg', '.jpeg', '.png', '.webp', '.avif')
     suffixes = images + ('.info.json', '.json', '.comments.json', '.description')
+    try:
+        name_max = os.pathconf(base, 'PC_NAME_MAX')
+    except (OSError, ValueError):
+        name_max = 255
     for name in list(names):
         stem = os.path.splitext(name)[0]
-        names.extend(stem + suffix for suffix in suffixes)
+        # A longer inferred suffix can exceed the NAS filename limit even when
+        # the real video/JPG fits. Such a sidecar cannot exist; don't attempt
+        # its deletion and turn a successful cleanup into ENAMETOOLONG.
+        names.extend(stem + suffix for suffix in suffixes
+                     if len(os.fsencode(os.path.basename(stem + suffix))) <= name_max)
     # Older yt-dlp filename trimming can leave an extra dotted suffix on
     # the media but not the info JSON. Only accept this exact alternative
     # when its embedded source URL confirms the association.

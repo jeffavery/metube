@@ -1509,6 +1509,24 @@ async def test_delete_media_removes_exact_sidecars_and_keeps_neighbors(dq_env, f
 
 
 @pytest.mark.asyncio
+async def test_delete_media_at_filesystem_name_limit(dq_env):
+    from pathlib import Path
+    from types import SimpleNamespace
+    dq = DownloadQueue(dq_env, AsyncMock())
+    filename = 'x' * 251 + '.mp4'
+    dq.done.dict['media'] = SimpleNamespace(info=SimpleNamespace(
+        filename=filename, download_type='video', folder=''))
+    primary = Path(dq_env.DOWNLOAD_DIR) / filename
+    thumbnail = primary.with_suffix('.jpg')
+    primary.write_text('media')
+    thumbnail.write_text('thumbnail')
+    assert (await dq.delete_media('media'))['status'] == 'ok'
+    assert not primary.exists()
+    assert not thumbnail.exists()
+    dq.close()
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("unsafe", ['../outside.mp4', '/tmp/outside.mp4', '.metube/completed'])
 async def test_delete_media_rejects_unsafe_paths_and_keeps_history(dq_env, unsafe):
     from types import SimpleNamespace
