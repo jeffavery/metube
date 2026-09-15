@@ -22,6 +22,7 @@ from watchfiles import DefaultFilter, Change, awatch
 
 import bg_tasks
 from ytdl import DownloadQueueNotifier, DownloadQueue, Download
+from library_routes import register_library
 from subscriptions import SubscriptionManager, SubscriptionNotifier, SubscriptionInfo, coerce_optional_bool
 from yt_dlp.version import __version__ as yt_dlp_version
 
@@ -1097,7 +1098,13 @@ async def delete(request):
     if where not in ['queue', 'done']:
         log.error("Bad request: incorrect 'where' value")
         raise web.HTTPBadRequest()
-    status = await (dqueue.cancel(ids) if where == 'queue' else dqueue.clear(ids))
+    if where == 'done' and post.get('history_only') is True:
+        for id in ids:
+            await dqueue.done.delete(id)
+            await dqueue.notifier.cleared(id)
+        status = {'status': 'ok'}
+    else:
+        status = await (dqueue.cancel(ids) if where == 'queue' else dqueue.clear(ids))
     log.info(f"Download delete request processed for ids: {ids}, where: {where}")
     return web.Response(text=serializer.encode(status))
 
@@ -1331,6 +1338,8 @@ if config.URL_PREFIX != '/':
     @routes.get(config.URL_PREFIX[:-1])
     async def index_redirect_dir(request):
         return web.HTTPFound(config.URL_PREFIX)
+
+library = register_library(routes, config, dqueue, sio, _read_json_request, _require_id)
 
 routes.static(config.URL_PREFIX + 'download/', config.DOWNLOAD_DIR, show_index=config.DOWNLOAD_DIRS_INDEXABLE)
 routes.static(config.URL_PREFIX + 'audio_download/', config.AUDIO_DOWNLOAD_DIR, show_index=config.DOWNLOAD_DIRS_INDEXABLE)

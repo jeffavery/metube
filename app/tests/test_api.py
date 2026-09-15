@@ -60,6 +60,16 @@ def _json_request(body: dict | None):
 
 
 @pytest.mark.asyncio
+async def test_explicit_history_clear_never_calls_file_deleting_clear(mock_dqueue):
+    mock_dqueue.done.delete = AsyncMock()
+    mock_dqueue.notifier.cleared = AsyncMock()
+    response = await main.delete(_json_request({'where': 'done', 'ids': ['video'], 'history_only': True}))
+    assert response.status == 200
+    mock_dqueue.clear.assert_not_called()
+    mock_dqueue.done.delete.assert_awaited_once_with('video')
+
+
+@pytest.mark.asyncio
 async def test_add_ok(mock_dqueue):
     req = _json_request(_valid_video_add_body())
     resp = await main.add(req)
