@@ -1,6 +1,7 @@
 import { DatePipe, KeyValuePipe, NgTemplateOutlet } from '@angular/common';
 import { HttpClient } from '@angular/common/http';
-import { AfterViewInit, ChangeDetectionStrategy, ChangeDetectorRef, Component, DestroyRef, ElementRef, viewChild, inject, OnDestroy, OnInit } from '@angular/core';
+import { AfterViewInit, ChangeDetectionStrategy, ChangeDetectorRef, Component, DestroyRef, ElementRef, HostListener, viewChild, inject, OnDestroy, OnInit } from '@angular/core';
+import { LibraryComponent, shortTitle } from './library/library.component';
 import { Observable, OperatorFunction, Subject, Subscription, from, map, merge, debounceTime, distinctUntilChanged, filter, finalize, mergeMap, takeUntil, tap } from 'rxjs';
 import { FormsModule } from '@angular/forms';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
@@ -40,6 +41,7 @@ import { SelectAllCheckboxComponent, ItemCheckboxComponent, ToastContainerCompon
   selector: 'app-root',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
+        LibraryComponent,
         FormsModule,
         NgTemplateOutlet,
         KeyValuePipe,
@@ -58,6 +60,17 @@ import { SelectAllCheckboxComponent, ItemCheckboxComponent, ToastContainerCompon
   styleUrl: './app.sass',
 })
 export class App implements AfterViewInit, OnInit, OnDestroy {
+  libraryRoute = window.location.hash;
+  saveComments = false;
+
+  @HostListener('window:hashchange')
+  onLibraryNavigation() {
+    this.libraryRoute = window.location.hash;
+    this.cdr.markForCheck();
+  }
+
+  get isLibraryPage() { return this.libraryRoute.startsWith('#/archive'); }
+  get advancedPresetNames() { return this.ytdlOptionPresetNames.filter(name => name !== 'Save Comments'); }
   downloads = inject(DownloadsService);
   subscriptionsSvc = inject(SubscriptionsService);
   private toasts = inject(ToastService);
@@ -270,7 +283,7 @@ export class App implements AfterViewInit, OnInit, OnDestroy {
     this.clipEnd = this.cookieService.get('metube_clip_end') || '';
     this.subtitleLanguage = this.cookieService.get('metube_subtitle_language') || 'en';
     this.subtitleMode = this.cookieService.get('metube_subtitle_mode') || 'prefer_manual';
-    this.ytdlOptionsPresets = this.loadYtdlOptionsPresetsFromCookie();
+    this.ytdlOptionsPresets = this.loadYtdlOptionsPresetsFromCookie().filter(name => name !== 'Save Comments');
     this.ytdlOptionsOverrides = this.cookieService.get('metube_ytdl_options_overrides') || '';
     const allowedDownloadTypes = new Set(this.downloadTypes.map(t => t.id));
     const allowedVideoCodecs = new Set(this.videoCodecs.map(c => c.id));
@@ -1151,6 +1164,10 @@ export class App implements AfterViewInit, OnInit, OnDestroy {
     this.addInProgress = true;
     this.cancelRequested = false;
     this.addRequestSub?.unsubscribe();
+    if (this.saveComments && this.ytdlOptionPresetNames.includes('Save Comments')) {
+      payload.ytdlOptionsPresets = [...new Set([...payload.ytdlOptionsPresets, 'Save Comments'])];
+    }
+    this.saveComments = false;
     this.addRequestSub = this.downloads.add(payload).subscribe((status: Status) => {
       if (status.status === 'error' && !this.cancelRequested) {
         this.toasts.error(`Error adding URL: ${status.msg}`);
@@ -1240,8 +1257,14 @@ export class App implements AfterViewInit, OnInit, OnDestroy {
   }
 
   completedTitle(title: string): string {
-    const words = title.trim().split(/\s+/);
-    return words.length > 8 ? words.slice(0, 8).join(' ') + '…' : title;
+    return shortTitle(title);
+  }
+
+  archiveDownload(id: string) {
+    this.downloads.archive(id).subscribe((res) => {
+      this.handleActionResult(res, 'Archive failed');
+      if (res.status === 'ok') this.toasts.info('Saved to Archive');
+    });
   }
 
   thumbnailLink(id: string): string {

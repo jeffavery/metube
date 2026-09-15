@@ -244,3 +244,24 @@ main
   border-radius: 4px
   margin-right: 10px
   vertical-align: middle
+
+.completed-heading
+  display: flex
+  align-items: center
+  gap: .35rem
+  min-width: 220px
+  > a
+    flex-shrink: 0
+  > span
+    min-width: 0
+    overflow-wrap: anywhere
+
+.completed-actions
+  flex-wrap: wrap
+  min-width: 210px
+  max-width: 250px
+  align-items: center
+  .btn-link
+    font-size: .8rem
+    white-space: nowrap
+    padding: .25rem .45rem

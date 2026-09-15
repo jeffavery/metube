@@ -2,7 +2,7 @@ import { TestBed } from '@angular/core/testing';
 import { HttpClient } from '@angular/common/http';
 import { Subject, of } from 'rxjs';
 import { App } from './app';
-import { DownloadsService } from './services/downloads.service';
+import { AddDownloadPayload, DownloadsService } from './services/downloads.service';
 import { SubscriptionsService } from './services/subscriptions.service';
 import { ToastService } from './services/toast.service';
 import { CookieService } from 'ngx-cookie-service';
@@ -36,7 +36,10 @@ class DownloadsServiceStub {
     return of({ presets: ['Preset A'] });
   }
 
-  add() {
+  addCalls: AddDownloadPayload[] = [];
+
+  add(payload: AddDownloadPayload) {
+    this.addCalls.push(payload);
     return of({ status: 'ok' as const });
   }
 
@@ -171,6 +174,27 @@ describe('App', () => {
     const fixture = TestBed.createComponent(App);
     const app = fixture.componentInstance;
     expect(app).toBeTruthy();
+  });
+
+  it('Save Comments defaults off, applies once, and does not alter subscription payloads', () => {
+    const fixture = TestBed.createComponent(App);
+    fixture.detectChanges();
+    const app = fixture.componentInstance;
+    app.ytdlOptionPresetNames = ['Preset A', 'Save Comments'];
+    app.ytdlOptionsPresets = ['Preset A'];
+    expect(app.saveComments).toBe(false);
+    app.saveComments = true;
+    expect(app['buildAddPayload']().ytdlOptionsPresets).toEqual(['Preset A']);
+    expect(app.advancedPresetNames).toEqual(['Preset A']);
+    app.addUrl = 'https://example.com/one';
+    app.addDownload();
+    expect(downloads.addCalls[0].ytdlOptionsPresets).toEqual(['Preset A', 'Save Comments']);
+    expect(app.saveComments).toBe(false);
+    app.addUrl = 'https://example.com/two';
+    app.addDownload();
+    expect(downloads.addCalls[1].ytdlOptionsPresets).toEqual(['Preset A']);
+    const checkbox = (fixture.nativeElement as HTMLElement).querySelector('#save-comments');
+    expect(checkbox?.closest('#advancedOptions')).toBeNull();
   });
 
   it('pre-fills the download folder from DEFAULT_FOLDER', () => {

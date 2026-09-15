@@ -189,6 +189,12 @@ export class DownloadsService {
     );
   }
 
+  public archive(id: string) {
+    return this.http.post<Status>('library/archive', { id }).pipe(
+      catchError((err: HttpErrorResponse) => this.handleHTTPError(err))
+    );
+  }
+
   public delById(where: State, ids: string[]) {
     const map = this[where];
     if (map) {
@@ -199,7 +205,7 @@ export class DownloadsService {
         }
       }
     }
-    return this.http.post<Status>('delete', {where: where, ids: ids}).pipe(
+    return this.http.post<Status>('delete', {where: where, ids: ids, ...(where === 'done' ? { history_only: true } : {})}).pipe(
       catchError((err: HttpErrorResponse) => {
         // Request failed — the rows would otherwise stay disabled forever
         // with no way to retry, since nothing ever clears `deleting`.
