@@ -1069,6 +1069,26 @@ def _require_id_list(post: dict) -> list:
     return ids
 
 
+@routes.post(config.URL_PREFIX + 'delete-media')
+async def delete_media(request):
+    post = await _read_json_request(request)
+    result = await dqueue.delete_media(_require_id(post))
+    return web.json_response(result, status=200 if result['status'] == 'ok' else 400)
+
+
+@routes.get(config.URL_PREFIX + 'media-thumbnail')
+async def media_thumbnail(request):
+    try:
+        paths, extensions = dqueue.media_paths(request.query.get('id', ''))
+        thumbnail = next((path for path in paths
+                          if path.lower().endswith(extensions) and os.path.isfile(path)), None)
+    except (ValueError, OSError):
+        thumbnail = None
+    if not thumbnail:
+        raise web.HTTPNotFound()
+    return web.FileResponse(thumbnail, headers={'Cache-Control': 'no-cache'})
+
+
 @routes.post(config.URL_PREFIX + 'delete')
 async def delete(request):
     post = await _read_json_request(request)

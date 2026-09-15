@@ -1484,3 +1484,82 @@ async def test_clear_skips_deletion_outside_download_directory(dq_env):
 
     assert os.path.exists(outside_file)
     assert not dq.done.exists(download.info.url)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("filename", ["clip.mp4", "nested/clip.mp4"])
+async def test_delete_media_removes_exact_sidecars_and_keeps_neighbors(dq_env, filename):
+    from pathlib import Path
+    from types import SimpleNamespace
+    dq = DownloadQueue(dq_env, AsyncMock())
+    dq.done.dict['media'] = SimpleNamespace(info=SimpleNamespace(
+        filename=filename, download_type='video', folder=''))
+    primary = Path(dq_env.DOWNLOAD_DIR) / filename
+    primary.parent.mkdir(parents=True, exist_ok=True)
+    targets = [primary, primary.with_suffix('.jpg'), primary.with_suffix('.info.json'),
+               primary.with_suffix('.comments.json')]
+    neighbor = primary.with_name('clip extra.mp4')
+    for path in targets + [neighbor]:
+        path.write_text('fixture')
+    assert (await dq.delete_media('media'))['status'] == 'ok'
+    assert all(not path.exists() for path in targets)
+    assert neighbor.exists()
+    assert not dq.done.exists('media')
+    dq.close()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("unsafe", ['../outside.mp4', '/tmp/outside.mp4', '.metube/completed'])
+async def test_delete_media_rejects_unsafe_paths_and_keeps_history(dq_env, unsafe):
+    from types import SimpleNamespace
+    dq = DownloadQueue(dq_env, AsyncMock())
+    dq.done.dict['media'] = SimpleNamespace(info=SimpleNamespace(
+        filename=unsafe, download_type='video', folder=''))
+    assert (await dq.delete_media('media'))['status'] == 'error'
+    assert dq.done.exists('media')
+    dq.close()
+
+
+@pytest.mark.asyncio
+async def test_delete_media_rejects_symlink_before_deleting_primary(dq_env):
+    from pathlib import Path
+    from types import SimpleNamespace
+    dq = DownloadQueue(dq_env, AsyncMock())
+    dq.done.dict['media'] = SimpleNamespace(info=SimpleNamespace(
+        filename='clip.mp4', download_type='video', folder=''))
+    primary = Path(dq_env.DOWNLOAD_DIR) / 'clip.mp4'
+    primary.write_text('media')
+    primary.with_suffix('.jpg').symlink_to(primary)
+    assert (await dq.delete_media('media'))['status'] == 'error'
+    assert primary.exists()
+    assert dq.done.exists('media')
+    dq.close()
+
+
+@pytest.mark.asyncio
+async def test_delete_media_io_failure_retains_history_for_retry(dq_env):
+    from types import SimpleNamespace
+    dq = DownloadQueue(dq_env, AsyncMock())
+    dq.done.dict['media'] = SimpleNamespace(info=SimpleNamespace(
+        filename='clip.mp4', download_type='video', folder=''))
+    with patch('ytdl.os.remove', side_effect=PermissionError):
+        assert (await dq.delete_media('media'))['status'] == 'error'
+    assert dq.done.exists('media')
+    assert (await dq.delete_media('media'))['status'] == 'ok'
+    dq.close()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('matches', [True, False])
+async def test_legacy_metadata_requires_matching_source_url(dq_env, matches):
+    import json
+    from pathlib import Path
+    from types import SimpleNamespace
+    dq = DownloadQueue(dq_env, AsyncMock())
+    dq.done.dict['media'] = SimpleNamespace(info=SimpleNamespace(
+        filename='clip. Creator.mp4', download_type='video', folder='', url='https://example.com/video'))
+    metadata = Path(dq_env.DOWNLOAD_DIR) / 'clip.info.json'
+    metadata.write_text(json.dumps({'webpage_url': 'https://example.com/video' if matches else 'https://example.com/other'}))
+    assert (await dq.delete_media('media'))['status'] == 'ok'
+    assert metadata.exists() is not matches
+    dq.close()
