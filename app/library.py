@@ -18,6 +18,7 @@ from media_files import media_paths
 FIELDS = ('url', 'title', 'filename', 'folder', 'download_type', 'timestamp',
           'size', 'chapter_files', 'subtitle_files')
 MAX_METADATA_BYTES = 32 * 1024 * 1024
+DEFAULT_CATEGORIES = ['3D Printing', 'Machine and Fab stuff', 'Electronics', 'Funny Stuff']
 
 
 def text(value):
@@ -97,7 +98,39 @@ class Library:
         self.records = payload.get('records', {})
         if not isinstance(self.records, dict):
             raise ValueError('Archive records must be an object')
+        self.categories = payload.get('categories', list(DEFAULT_CATEGORIES))
+        if not isinstance(self.categories, list) or not all(isinstance(name, str) for name in self.categories):
+            raise ValueError('Archive categories must be a list of names')
         self.lock = asyncio.Lock()
+
+    async def _save(self, records, categories):
+        await asyncio.to_thread(self.store.save, {'records': records, 'categories': categories})
+        self.records = records
+        self.categories = categories
+
+    async def create_category(self, name):
+        if not isinstance(name, str):
+            raise ValueError('Enter a category name.')
+        name = ' '.join(name.split())
+        if not name or len(name) > 60:
+            raise ValueError('Category names must be between 1 and 60 characters.')
+        async with self.lock:
+            existing = next((item for item in self.categories if item.casefold() == name.casefold()), None)
+            if existing:
+                return existing
+            await self._save(dict(self.records), [*self.categories, name])
+            return name
+
+    async def set_categories(self, id, categories):
+        if not isinstance(categories, list) or not all(isinstance(name, str) for name in categories):
+            raise ValueError('Categories must be a list of names.')
+        async with self.lock:
+            record = self.get_record(id)
+            if any(name not in self.categories for name in categories):
+                raise ValueError('One or more categories no longer exist. Refresh and try again.')
+            updated = dict(self.records)
+            updated[id] = {**record, 'categories': list(dict.fromkeys(categories))}
+            await self._save(updated, list(self.categories))
 
     async def archive(self, id):
         async with self.lock:
@@ -116,9 +149,9 @@ class Library:
             key = hashlib.sha256(paths[0].encode()).hexdigest()[:24]
             updated = dict(self.records)
             record['archived_at'] = self.records.get(key, {}).get('archived_at', time.time())
+            record['categories'] = list(self.records.get(key, {}).get('categories', []))
             updated[key] = record
-            await asyncio.to_thread(self.store.save, {'records': updated})
-            self.records = updated
+            await self._save(updated, list(self.categories))
             # Explicit history removal; never call clear(), which can be
             # configured upstream to delete files.
             await self.queue.done.delete(id)
@@ -138,8 +171,7 @@ class Library:
             await asyncio.to_thread(self._delete_files, id)
             updated = dict(self.records)
             del updated[id]
-            await asyncio.to_thread(self.store.save, {'records': updated})
-            self.records = updated
+            await self._save(updated, list(self.categories))
 
     def _delete_files(self, id):
         paths, _ = self.paths(id)
@@ -176,6 +208,7 @@ class Library:
             'available': available, 'thumbnail': thumbnail,
             'download_type': text(record.get('download_type')),
             'warning': warning,
+            'categories': record.get('categories', []),
         }
         if details:
             result['comments'] = format_comments(metadata.get('comments'))

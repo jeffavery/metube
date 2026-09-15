@@ -131,6 +131,60 @@ def test_comment_fields_are_optional_and_nonfinite_values_are_ignored():
 
 
 @pytest.mark.asyncio
+async def test_multiple_categories_persist_and_survive_archive_deletion(environment):
+    config, queue, _, root = environment
+    library = Library(config, queue)
+    key = await library.archive('completed')
+    before = (root / 'video.mp4').read_bytes()
+    assert library.item(key)['categories'] == []
+    assert await library.create_category('  Shop   Projects ') == 'Shop Projects'
+    assert await library.create_category('shop projects') == 'Shop Projects'
+    await library.set_categories(key, ['3D Printing', 'Shop Projects', '3D Printing'])
+    reloaded = Library(config, queue)
+    assert reloaded.item(key)['categories'] == ['3D Printing', 'Shop Projects']
+    assert reloaded.categories.count('Shop Projects') == 1
+    assert (root / 'video.mp4').read_bytes() == before
+    await library.delete_media(key)
+    assert 'Shop Projects' in Library(config, queue).categories
+
+
+@pytest.mark.asyncio
+async def test_category_validation_and_write_failure_preserve_state(environment):
+    config, queue, _, _ = environment
+    library = Library(config, queue)
+    key = await library.archive('completed')
+    for invalid in ['', ' ' * 5, 'x' * 61, None]:
+        with pytest.raises(ValueError):
+            await library.create_category(invalid)
+    for invalid in ['Electronics', [None], ['Unknown']]:
+        with pytest.raises(ValueError):
+            await library.set_categories(key, invalid)
+    with patch.object(library.store, 'save', side_effect=OSError):
+        with pytest.raises(OSError):
+            await library.create_category('Unsaved')
+        with pytest.raises(OSError):
+            await library.set_categories(key, ['Electronics'])
+    assert 'Unsaved' not in library.categories
+    assert library.item(key)['categories'] == []
+    await library.set_categories(key, ['Electronics'])
+    await library.set_categories(key, [])
+    assert Library(config, queue).item(key)['categories'] == []
+
+
+@pytest.mark.asyncio
+async def test_old_archive_state_loads_without_categories(environment):
+    config, queue, _, _ = environment
+    library = Library(config, queue)
+    key = await library.archive('completed')
+    records = library.records
+    records[key].pop('categories')
+    library.store.save({'records': records})
+    reloaded = Library(config, queue)
+    assert reloaded.item(key)['categories'] == []
+    assert '3D Printing' in reloaded.categories
+
+
+@pytest.mark.asyncio
 async def test_archive_delete_removes_sidecars_and_persists(environment):
     config, queue, _, root = environment
     library = Library(config, queue)
@@ -191,6 +245,14 @@ async def test_archive_http_media_range_thumbnail_and_reload(environment):
         response = await client.post('/library/archive', json={'id': 'completed'})
         assert response.status == 200
         key = (await response.json())['id']
+        response = await client.get('/library/categories')
+        assert 'Electronics' in await response.json()
+        response = await client.post('/library/categories', json={'name': 'Projects'})
+        assert response.status == 200
+        response = await client.post(f'/library/{key}/categories', json={'categories': ['Projects', 'Electronics']})
+        assert response.status == 200
+        response = await client.get(f'/library/{key}')
+        assert (await response.json())['categories'] == ['Projects', 'Electronics']
         response = await client.get('/library')
         assert (await response.json())[0]['id'] == key
         response = await client.get(f'/library/{key}')

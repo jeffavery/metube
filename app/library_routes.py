@@ -39,6 +39,36 @@ def register_library(routes, config, queue, sio, read_json, require_id):
         await sio.emit('library_changed', {})
         return web.json_response({'status': 'ok'})
 
+    @routes.get(prefix + '/categories')
+    async def categories(request):
+        return web.json_response(library.categories)
+
+    @routes.post(prefix + '/categories')
+    async def create_category(request):
+        post = await read_json(request)
+        try:
+            name = await library.create_category(post.get('name'))
+        except ValueError as error:
+            return web.json_response({'status': 'error', 'msg': str(error)}, status=400)
+        except OSError:
+            return web.json_response({'status': 'error', 'msg': 'Could not save the category. Please try again.'}, status=500)
+        await sio.emit('library_changed', {})
+        return web.json_response({'status': 'ok', 'name': name})
+
+    @routes.post(prefix + '/{id}/categories')
+    async def set_categories(request):
+        post = await read_json(request)
+        try:
+            await library.set_categories(request.match_info['id'], post.get('categories'))
+        except KeyError:
+            raise web.HTTPNotFound()
+        except ValueError as error:
+            return web.json_response({'status': 'error', 'msg': str(error)}, status=400)
+        except OSError:
+            return web.json_response({'status': 'error', 'msg': 'Could not save categories. Please try again.'}, status=500)
+        await sio.emit('library_changed', {})
+        return web.json_response({'status': 'ok'})
+
     @routes.get(prefix + '/{id}')
     async def details(request):
         try:
