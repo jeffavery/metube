@@ -817,12 +817,17 @@
                     </button>
                   }
                 </div>
+                @if (entry[1].filename) {
+                  <a [href]="buildDownloadLink(entry[1])" target="_blank" [attr.aria-label]="'Play ' + entry[1].title">
+                    <img [src]="thumbnailLink(entry[0])" alt="" class="completed-thumbnail" loading="lazy" (error)="hideThumbnail($event)" />
+                  </a>
+                }
                 <span ngbTooltip="{{buildResultItemTooltip(entry[1])}}">@if (!!entry[1].filename) {
-                  <a href="{{buildDownloadLink(entry[1])}}" target="_blank">{{ entry[1].title }}</a>
+                  <a href="{{buildDownloadLink(entry[1])}}" target="_blank">{{ completedTitle(entry[1].title) }}</a>
                 } @else {
                   @if (entry[1].status === 'error') {
                     <button type="button" class="btn btn-link p-0 text-start align-baseline" (click)="toggleErrorDetail(entry[0])">
-                      {{entry[1].title}}
+                      {{completedTitle(entry[1].title)}}
                       @if (!isErrorExpanded(entry[0])) {
                         <small class="text-danger ms-2">
                           <fa-icon [icon]="faChevronRight" size="xs" class="me-1" />Click for details
@@ -830,7 +835,7 @@
                       }
                     </button>
                   } @else {
-                    <span>{{entry[1].title}}</span>
+                    <span>{{completedTitle(entry[1].title)}}</span>
                   }
                 }</span>
                 @if (entry[1].status === 'error' && isErrorExpanded(entry[0])) {
@@ -889,6 +894,9 @@
                     <button type="button" class="btn btn-link" [attr.aria-label]="'Share result file for ' + entry[1].title" (click)="shareDownload(entry[1])"><fa-icon [icon]="faShareNodes" /></button>
                   }
                   <a href="{{entry[1].url}}" target="_blank" class="btn btn-link" [attr.aria-label]="'Open source URL for ' + entry[1].title"><fa-icon [icon]="faExternalLinkAlt" /></a>
+                  @if (entry[1].filename) {
+                    <button type="button" class="btn btn-link text-danger" (click)="deleteMedia(entry[0])">Delete Media</button>
+                  }
                   <button type="button" class="btn btn-link" [attr.aria-label]="'Delete completed item ' + entry[1].title" (click)="delDownload('done', entry[0])"><fa-icon [icon]="faTrashAlt" /></button>
                 </div>
               </td>

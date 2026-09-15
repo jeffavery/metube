@@ -1233,6 +1233,25 @@ export class App implements AfterViewInit, OnInit, OnDestroy {
       });
   }
 
+  deleteMedia(id: string) {
+    if (window.confirm('Delete this download and its associated media, thumbnail, and metadata/comment files from storage? This cannot be undone.')) {
+      this.downloads.deleteMedia(id).subscribe((res) => this.handleActionResult(res, 'Delete Media failed'));
+    }
+  }
+
+  completedTitle(title: string): string {
+    const words = title.trim().split(/\s+/);
+    return words.length > 8 ? words.slice(0, 8).join(' ') + '…' : title;
+  }
+
+  thumbnailLink(id: string): string {
+    return 'media-thumbnail?id=' + encodeURIComponent(id);
+  }
+
+  hideThumbnail(event: Event) {
+    (event.target as HTMLImageElement).hidden = true;
+  }
+
   delDownload(where: State, id: string) {
     this.downloads.delById(where, [id]).subscribe((res) => this.handleActionResult(res, 'Delete failed'));
   }

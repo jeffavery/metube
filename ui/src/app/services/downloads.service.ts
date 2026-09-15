@@ -183,6 +183,12 @@ export class DownloadsService {
     );
   }
 
+  public deleteMedia(id: string) {
+    return this.http.post<Status>('delete-media', { id }).pipe(
+      catchError((err: HttpErrorResponse) => this.handleHTTPError(err))
+    );
+  }
+
   public delById(where: State, ids: string[]) {
     const map = this[where];
     if (map) {

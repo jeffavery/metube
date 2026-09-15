@@ -21,6 +21,12 @@ class DownloadsServiceStub {
   ytdlOptionsChanged = new Subject<Record<string, unknown>>();
   updated = new Subject<void>();
   retryCalls: string[] = [];
+  mediaCalls: string[] = [];
+
+  deleteMedia(id: string) {
+    this.mediaCalls.push(id);
+    return of({ status: 'ok' as const });
+  }
 
   getCookieStatus() {
     return of({ status: 'ok', has_cookies: false });
@@ -141,6 +147,24 @@ describe('App', () => {
         },
       ],
     }).compileComponents();
+  });
+
+  it('shortens only long display titles to eight words', () => {
+    const app = TestBed.createComponent(App).componentInstance;
+    expect(app.completedTitle('one two three four five six seven eight nine')).toBe('one two three four five six seven eight…');
+    expect(app.completedTitle('one two')).toBe('one two');
+    expect(app.completedTitle('')).toBe('');
+  });
+
+  it('deletes media only after confirmation', () => {
+    const app = TestBed.createComponent(App).componentInstance;
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
+    app.deleteMedia('media');
+    expect(downloads.mediaCalls).toEqual([]);
+    confirm.mockReturnValue(true);
+    app.deleteMedia('media');
+    expect(downloads.mediaCalls).toEqual(['media']);
+    confirm.mockRestore();
   });
 
   it('should create the app', () => {
